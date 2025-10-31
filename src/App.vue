@@ -1,48 +1,43 @@
 <script setup>
-// 1. IMPORTAÇÕES
 import { ref, onMounted } from 'vue'
 
+// 1. DEFINIR A URL DA API
+const API_URL = "http://localhost:5149/api/tarefas" 
+
 // 2. ESTADO
-const posts = ref([])
+const tarefas = ref([])
 const loading = ref(true)
 
-//Variáveis reativas para os campos do formulário
-const newPostTitle = ref('')
-const newPostBody = ref('')
-// Variável para controlar o estado de "enviando" do formulário
+const newTarefaTitulo = ref('')
 const isSubmitting = ref(false)
 
 
-// 3. FUNÇÃO FETCH (BUSCAR DADOS)
-async function fetchAllPosts() {
+// 3. FUNÇÃO FETCH
+async function fetchAllTarefas() {
   loading.value = true
   try {
-    const response = await fetch('https://jsonplaceholder.typicode.com/posts')
+    const response = await fetch(API_URL)
     const data = await response.json()
-    // A API retorna 100 posts, vamos pegar só os 10 primeiros para a lista não ficar gigante
-    posts.value = data.slice(0, 10) 
+    tarefas.value = data
   } catch (error) {
-    console.error('Erro ao buscar posts:', error)
+    console.error('Erro ao buscar tarefas:', error)
   } finally {
     loading.value = false
   }
 }
 
-// 4. NOVO: FUNÇÃO CREATE (ENVIAR DADOS)
-async function createPost() {
-  // Se já estiver enviando, não faça nada (evita cliques duplos)
+// 4. FUNÇÃO CREATE
+async function createTarefa() {
   if (isSubmitting.value) return 
 
-  isSubmitting.value = true // Ativa o estado de "enviando"
+  isSubmitting.value = true
 
   try {
-    // Faz a requisição 'POST', enviando os dados do formulário
-    const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
+    const response = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify({
-        title: newPostTitle.value, // Pega o valor do input de título
-        body: newPostBody.value,   // Pega o valor do textarea
-        userId: 1, // A API exige um userId, podemos "fingir" que é o usuário 1
+        titulo: newTarefaTitulo.value,
+        concluida: false
       }),
       headers: {
         'Content-Type': 'application/json; charset=UTF-8',
@@ -50,77 +45,126 @@ async function createPost() {
     })
 
     if (!response.ok) {
-      throw new Error('Falha ao criar o post')
+      throw new Error('Falha ao criar a tarefa')
     }
 
-    // A API nos devolve o post que foi "criado" (com um novo ID)
-    const createdPost = await response.json()
-
-    // Adiciona o post recém-criado no INÍCIO da nossa lista 'posts'
-    // 'unshift' adiciona um item no começo de um array
-    posts.value.unshift(createdPost)
-
-    // Limpa os campos do formulário
-    newPostTitle.value = ''
-    newPostBody.value = ''
+    const createdTarefa = await response.json()
+    tarefas.value.unshift(createdTarefa) // Adiciona na lista local
+    newTarefaTitulo.value = '' // Limpa o campo
 
   } catch (error) {
-    console.error('Erro ao criar post:', error)
+    console.error('Erro ao criar tarefa:', error)
   } finally {
-    isSubmitting.value = false // Desativa o estado de "enviando"
+    isSubmitting.value = false
+  }
+}
+
+// 6. FUNÇÃO PARA ATUALIZAR (TOGGLE) O STATUS
+async function toggleConcluida(tarefa) {
+  try {
+    const response = await fetch(`${API_URL}/${tarefa.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Falha ao atualizar a tarefa');
+    }
+
+    const tarefaAtualizada = await response.json();
+
+    const index = tarefas.value.findIndex(t => t.id === tarefaAtualizada.id);
+    if (index !== -1) {
+      tarefas.value[index] = tarefaAtualizada;
+    }
+
+  } catch (error) {
+    console.error('Erro ao atualizar tarefa:', error);
+  }
+}
+
+// 7. DELETAR TAREFA
+async function deleteTarefa(tarefaId) {
+  if (!confirm("Tem certeza que deseja deletar esta tarefa?")) {
+    return;
+  }
+  try {
+    const response = await fetch(`${API_URL}/${tarefaId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Falha ao deletar a tarefa');
+    }
+    tarefas.value = 
+    tarefas.value.filter(t => t.id !== tarefaId);
+  } catch (error) {
+    console.error('Erro ao deletar tarefa:', error);
   }
 }
 
 // 5. CICLO DE VIDA
 onMounted(() => {
-  fetchAllPosts()
+  fetchAllTarefas()
 })
 </script>
 
 <template>
   <div id="app">
     <header>
-      <h1>Meu Blog (Consumindo API)</h1>
+      <h1>Lista de Tarefas</h1>
     </header>
 
     <section class="form-container">
-      <h2>Criar Novo Post</h2>
-      <form @submit.prevent="createPost">
+      <h2>Nova Tarefa</h2>
+      <form @submit.prevent="createTarefa">
         <div class="form-group">
-          <label for="post-title">Título:</label>
+          <label for="tarefa-titulo">Título:</label>
           <input 
             type="text" 
-            id="post-title" 
-            v-model="newPostTitle" 
+            id="tarefa-titulo" 
+            v-model="newTarefaTitulo" 
             required 
           />
         </div>
-        <div class="form-group">
-          <label for="post-body">Conteúdo:</label>
-          <textarea 
-            id="post-body" 
-            v-model="newPostBody" 
-            rows="4" 
-            required
-          ></textarea>
-        </div>
         <button type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Enviando...' : 'Criar Post' }}
+          {{ isSubmitting ? 'Salvando...' : 'Adicionar Tarefa' }}
         </button>
       </form>
     </section>
 
     <main>
-      <h2>Posts Recentes</h2>
+      <h2>Minhas Tarefas</h2>
       
       <div v-if="loading" class="loading">
-        Carregando posts...
+        Carregando...
       </div>
       
-      <ul v-else class="post-list">
-        <li v-for="post in posts" :key="post.id" class="post-item">
-          <h2>{{ post.title }}</h2>
-          <p>{{ post.body }}</p>
+      <div v-if="!loading && tarefas.length === 0" class="empty-list">
+        Nenhuma tarefa encontrada. Adicione uma!
+      </div>
+      
+      <ul class="post-list">
+        <li v-for="tarefa in tarefas" :key="tarefa.id" class="post-item">
+          
+          <span :class="{ 'tarefa-concluida': tarefa.concluida }">
+            {{ tarefa.titulo }}
+          </span>
+
+          <div class="botoes-acao">
+            <button @click="toggleConcluida(tarefa)"
+                    :class="['toggle-btn', tarefa.concluida ? 'btn-reabrir' : 'btn-concluir']">
+              
+              {{ tarefa.concluida ? 'Reabrir' : '✔ Concluir' }}
+
+            </button>
+
+            <button @click="deleteTarefa(tarefa.id)" class="toggle-btn btn-deletar">
+              Deletar
+            </button>
+          </div>
+
         </li>
       </ul>
     </main>
@@ -128,7 +172,6 @@ onMounted(() => {
 </template>
 
 <style>
-/* 8. ESTILIZAÇÃO */
 body {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   color: #2c3e50;
@@ -136,28 +179,23 @@ body {
   margin: 0;
   padding: 0;
 }
-
 #app {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
-
 header {
-  background-color: #42b983;
+  background-color: #34495e;
   color: white;
   padding: 20px;
   text-align: center;
   border-radius: 8px;
   margin-bottom: 20px;
 }
-
 h2 {
-  border-bottom: 2px solid #42b983;
+  border-bottom: 2px solid #34495e;
   padding-bottom: 5px;
 }
-
-/* Estilos do Formulário */
 .form-container {
   background-color: white;
   padding: 20px;
@@ -165,26 +203,21 @@ h2 {
   margin-bottom: 30px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
-
 .form-group {
   margin-bottom: 15px;
 }
-
 .form-group label {
   display: block;
   margin-bottom: 5px;
   font-weight: bold;
 }
-
-.form-group input[type="text"],
-.form-group textarea {
-  width: 95%; /* 100% com padding pode estourar */
+.form-group input[type="text"] {
+  width: 95%;
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1em;
 }
-
 button {
   background-color: #42b983;
   color: white;
@@ -193,31 +226,21 @@ button {
   border-radius: 4px;
   font-size: 1em;
   cursor: pointer;
-  transition: background-color 0.2s;
 }
-
-button:hover {
-  background-color: #369b70;
-}
-
 button:disabled {
   background-color: #aaa;
-  cursor: not-allowed;
 }
 
-
-/* Estilos da Lista */
-.loading {
+.loading, .empty-list {
   text-align: center;
-  font-size: 1.5em;
-  padding: 50px;
+  font-size: 1.2em;
+  padding: 40px;
+  color: #777;
 }
-
 .post-list {
   list-style: none;
   padding: 0;
 }
-
 .post-item {
   background-color: white;
   border: 1px solid #ddd;
@@ -225,10 +248,48 @@ button:disabled {
   padding: 20px;
   margin-bottom: 15px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-
-.post-item h2 {
-  margin-top: 0;
-  text-transform: capitalize;
+.tarefa-concluida {
+  text-decoration: line-through;
+  color: #999;
+}
+.status {
+  font-size: 0.9em;
+  font-weight: bold;
+  color: #777;
+}
+.toggle-btn {
+  padding: 5px 10px;
+  font-size: 0.9em;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  transition: background-color 0.2s;
+}
+.btn-concluir {
+  background-color: #42b983;
+}
+.btn-concluir:hover {
+  background-color: #369b70;
+}
+.btn-reabrir {
+  background-color: #f39c12;
+}
+.btn-reabrir:hover {
+  background-color: #d35400;
+}
+.botoes-acao {
+  display: flex;
+  gap: 10px;
+}
+.btn-deletar {
+  background-color: #e74c3c;
+}
+.btn-deletar:hover {
+  background-color: #c0392b;
 }
 </style>
